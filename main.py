@@ -1,65 +1,58 @@
 import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn import metrics
-from sklearn import svm
-import numpy as np
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.svm import SVC
 
+# Load dataset
+df = pd.read_csv("data/diabetes.csv")
 
-file_path = "diabetes.csv" 
-ds = pd.read_csv(file_path)
+# Data cleaning
+cols = ['Glucose', 'BloodPressure', 'SkinThickness', 'Insulin', 'BMI']
+df[cols] = df[cols].replace(0, df[cols].median())
 
+X = df.drop("Outcome", axis=1)
+y = df["Outcome"]
 
-print("First 10 rows of dataset:")
-print(ds.head(10))
+# Split
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
 
+# Pipeline
+pipeline = Pipeline([
+    ("scaler", StandardScaler()),
+    ("svm", SVC(class_weight='balanced', probability=True))
+])
 
-print("\nDataset shape:", ds.shape)
+# Tuning
+param_grid = {
+    "svm__kernel": ["linear", "rbf", "poly"],
+    "svm__C": [0.1, 1, 10],
+    "svm__gamma": ["scale", "auto"]
+}
 
+grid = GridSearchCV(pipeline, param_grid, cv=5, scoring="recall")
+grid.fit(X_train, y_train)
 
-print("\nDataset summary:")
-print(ds.describe())
+model = grid.best_estimator_
 
-
-features = ['Pregnancies', 'Glucose', 'BloodPressure', 'SkinThickness', 
-            'Insulin', 'BMI', 'DiabetesPedigreeFunction', 'Age']
-x = ds[features]  # Features
-y = ds['Outcome']  # Target variable
-
-
-x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.30, random_state=40)
-
-
-clf = svm.SVC(kernel='poly')
-
-
-clf.fit(x_train, y_train)
-
-
-y_pred_train = clf.predict(x_train)
-y_pred_test = clf.predict(x_test)
-
-
-print("\nTraining Accuracy:", metrics.accuracy_score(y_train, y_pred_train))
-print("Testing Accuracy:", metrics.accuracy_score(y_test, y_pred_test))
-print("Precision:", metrics.precision_score(y_test, y_pred_test))
-print("Recall:", metrics.recall_score(y_test, y_pred_test))
-
+# -------- USER INPUT --------
+features = list(X.columns)
 
 print("\nEnter values for prediction:")
-pregnancies = float(input("Pregnancies: "))
-glucose = float(input("Glucose: "))
-blood_pressure = float(input("Blood Pressure: "))
-skin_thickness = float(input("Skin Thickness: "))
-insulin = float(input("Insulin: "))
-bmi = float(input("BMI: "))
-dpf = float(input("Diabetes Pedigree Function: "))
-age = float(input("Age: "))
+values = []
 
+for f in features:
+    val = float(input(f"{f}: "))
+    values.append(val)
 
-X1 = np.array([[pregnancies, glucose, blood_pressure, skin_thickness, insulin, bmi, dpf, age]])
-X1_df = pd.DataFrame(X1, columns=features)
+input_df = pd.DataFrame([values], columns=features)
 
+prediction = model.predict(input_df)[0]
+prob = model.predict_proba(input_df)[0][1]
 
-new_prediction = clf.predict(X1_df)
-result = "Diabetic" if new_prediction[0] == 1 else "Not Diabetic"
-print("\nThe person is:", result)
+result = "Diabetic" if prediction == 1 else "Not Diabetic"
+
+print("\nPrediction:", result)
+print("Confidence:", round(prob * 100, 2), "%")
